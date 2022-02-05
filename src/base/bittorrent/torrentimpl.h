@@ -37,6 +37,7 @@
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/torrent_status.hpp>
 
+#include <QBitArray>
 #include <QDateTime>
 #include <QHash>
 #include <QMap>
@@ -285,6 +286,7 @@ namespace BitTorrent
         TorrentState m_state = TorrentState::Unknown;
         TorrentInfo m_torrentInfo;
         QStringList m_filePaths;
+        QHash<lt::file_index_t, int> m_indexMap;
         SpeedMonitor m_speedMonitor;
 
         InfoHash m_infoHash;
@@ -320,5 +322,7 @@ namespace BitTorrent
         bool m_unchecked = false;
 
         lt::add_torrent_params m_ltAddTorrentParams;
+
+        mutable QBitArray m_pieces;
     };
 }

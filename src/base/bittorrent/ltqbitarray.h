@@ -1,6 +1,6 @@
 /*
  * Bittorrent Client using Qt and libtorrent.
- * Copyright (C) 2017  Tony Gregerson <tony.gregerson@gmail.com>
+ * Copyright (C) 2022  Mike Tzou (Chocobo1)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -28,34 +28,11 @@
 
 #pragma once
 
-#include <QTreeView>
+#include <libtorrent/fwd.hpp>
 
-class TagFilterWidget final : public QTreeView
+class QBitArray;
+
+namespace BitTorrent::LT
 {
-    Q_OBJECT
-
-public:
-    explicit TagFilterWidget(QWidget *parent = nullptr);
-
-    QString currentTag() const;
-
-signals:
-    void tagChanged(const QString &tag);
-    void actionResumeTorrentsTriggered();
-    void actionPauseTorrentsTriggered();
-    void actionDeleteTorrentsTriggered();
-
-private slots:
-    void onCurrentRowChanged(const QModelIndex &current, const QModelIndex &previous);
-    void showMenu();
-    void callUpdateGeometry();
-    void addTag();
-    void removeTag();
-    void removeUnusedTags();
-
-private:
-    QSize sizeHint() const override;
-    QSize minimumSizeHint() const override;
-    void rowsInserted(const QModelIndex &parent, int start, int end) override;
-    QString askTagName();
-};
+    QBitArray toQBitArray(const lt::bitfield &bits);
+}

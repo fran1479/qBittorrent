@@ -343,7 +343,7 @@ Session::Session(QObject *parent)
     , m_outgoingPortsMin(BITTORRENT_SESSION_KEY("OutgoingPortsMin"), 0)
     , m_outgoingPortsMax(BITTORRENT_SESSION_KEY("OutgoingPortsMax"), 0)
     , m_UPnPLeaseDuration(BITTORRENT_SESSION_KEY("UPnPLeaseDuration"), 0)
-    , m_peerToS(BITTORRENT_SESSION_KEY("PeerToS"), 0x20)
+    , m_peerToS(BITTORRENT_SESSION_KEY("PeerToS"), 0x04)
     , m_ignoreLimitsOnLAN(BITTORRENT_SESSION_KEY("IgnoreLimitsOnLAN"), false)
     , m_includeOverheadInLimits(BITTORRENT_SESSION_KEY("IncludeOverheadInLimits"), false)
     , m_announceIP(BITTORRENT_SESSION_KEY("AnnounceIP"))
@@ -396,8 +396,9 @@ Session::Session(QObject *parent)
     , m_maxRatioAction(BITTORRENT_SESSION_KEY("MaxRatioAction"), Pause)
     , m_savePath(BITTORRENT_SESSION_KEY("DefaultSavePath"), specialFolderLocation(SpecialFolder::Downloads), Utils::Fs::toUniformPath)
     , m_downloadPath(BITTORRENT_SESSION_KEY("TempPath"), specialFolderLocation(SpecialFolder::Downloads) + QLatin1String("/temp"), Utils::Fs::toUniformPath)
-    , m_isSubcategoriesEnabled(BITTORRENT_SESSION_KEY("SubcategoriesEnabled"), false)
     , m_isDownloadPathEnabled(BITTORRENT_SESSION_KEY("TempPathEnabled"), false)
+    , m_isSubcategoriesEnabled(BITTORRENT_SESSION_KEY("SubcategoriesEnabled"), false)
+    , m_useCategoryPathsInManualMode(BITTORRENT_SESSION_KEY("UseCategoryPathsInManualMode"), false)
     , m_isAutoTMMDisabledByDefault(BITTORRENT_SESSION_KEY("DisableAutoTMMByDefault"), true)
     , m_isDisableAutoTMMWhenCategoryChanged(BITTORRENT_SESSION_KEY("DisableAutoTMMTriggers/CategoryChanged"), false)
     , m_isDisableAutoTMMWhenDefaultSavePathChanged(BITTORRENT_SESSION_KEY("DisableAutoTMMTriggers/DefaultSavePathChanged"), true)
@@ -819,6 +820,16 @@ void Session::setSubcategoriesEnabled(const bool value)
 
     m_isSubcategoriesEnabled = value;
     emit subcategoriesSupportChanged();
+}
+
+bool Session::useCategoryPathsInManualMode() const
+{
+    return m_useCategoryPathsInManualMode;
+}
+
+void Session::setUseCategoryPathsInManualMode(const bool value)
+{
+    m_useCategoryPathsInManualMode = value;
 }
 
 QSet<QString> Session::tags() const
@@ -2060,26 +2071,38 @@ LoadTorrentParams Session::initLoadTorrentParams(const AddTorrentParams &addTorr
     loadTorrentParams.ratioLimit = addTorrentParams.ratioLimit;
     loadTorrentParams.seedingTimeLimit = addTorrentParams.seedingTimeLimit;
 
-    if (!loadTorrentParams.useAutoTMM)
-    {
-        loadTorrentParams.savePath = (QDir::isAbsolutePath(addTorrentParams.savePath)
-                                      ? addTorrentParams.savePath
-                                      : Utils::Fs::resolvePath(addTorrentParams.savePath, savePath()));
-
-        const bool useDownloadPath = addTorrentParams.useDownloadPath.value_or(isDownloadPathEnabled());
-        if (useDownloadPath)
-        {
-            loadTorrentParams.downloadPath = (QDir::isAbsolutePath(addTorrentParams.downloadPath)
-                                              ? addTorrentParams.downloadPath
-                                              : Utils::Fs::resolvePath(addTorrentParams.downloadPath, downloadPath()));
-        }
-    }
-
     const QString category = addTorrentParams.category;
     if (!category.isEmpty() && !m_categories.contains(category) && !addCategory(category))
         loadTorrentParams.category = "";
     else
         loadTorrentParams.category = category;
+
+    if (!loadTorrentParams.useAutoTMM)
+    {
+        if (QDir::isAbsolutePath(addTorrentParams.savePath))
+        {
+            loadTorrentParams.savePath = addTorrentParams.savePath;
+        }
+        else
+        {
+            const QString basePath = useCategoryPathsInManualMode() ? categorySavePath(loadTorrentParams.category) : savePath();
+            loadTorrentParams.savePath = Utils::Fs::resolvePath(addTorrentParams.savePath, basePath);
+        }
+
+        const bool useDownloadPath = addTorrentParams.useDownloadPath.value_or(isDownloadPathEnabled());
+        if (useDownloadPath)
+        {
+            if (QDir::isAbsolutePath(addTorrentParams.downloadPath))
+            {
+                loadTorrentParams.downloadPath = addTorrentParams.downloadPath;
+            }
+            else
+            {
+                const QString basePath = useCategoryPathsInManualMode() ? categoryDownloadPath(loadTorrentParams.category) : downloadPath();
+                loadTorrentParams.downloadPath = Utils::Fs::resolvePath(addTorrentParams.downloadPath, basePath);
+            }
+        }
+    }
 
     for (const QString &tag : addTorrentParams.tags)
     {
@@ -2148,24 +2171,24 @@ bool Session::addTorrent_impl(const std::variant<MagnetUri, TorrentInfo> &source
     {
         const TorrentInfo &torrentInfo = std::get<TorrentInfo>(source);
 
-        // if torrent name wasn't explicitly set we handle the case of
-        // initial renaming of torrent content and rename torrent accordingly
-        if (loadTorrentParams.name.isEmpty())
-        {
-            QString contentName = torrentInfo.rootFolder();
-            if (contentName.isEmpty() && (torrentInfo.filesCount() == 1))
-                contentName = Utils::Fs::fileName(torrentInfo.filePath(0));
-
-            if (!contentName.isEmpty() && (contentName != torrentInfo.name()))
-                loadTorrentParams.name = contentName;
-        }
-
         Q_ASSERT(addTorrentParams.filePaths.isEmpty() || (addTorrentParams.filePaths.size() == torrentInfo.filesCount()));
 
         const TorrentContentLayout contentLayout = ((loadTorrentParams.contentLayout == TorrentContentLayout::Original)
                                                     ? detectContentLayout(torrentInfo.filePaths()) : loadTorrentParams.contentLayout);
         QStringList filePaths = (!addTorrentParams.filePaths.isEmpty() ? addTorrentParams.filePaths : torrentInfo.filePaths());
         applyContentLayout(filePaths, contentLayout, Utils::Fs::findRootFolder(torrentInfo.filePaths()));
+
+        // if torrent name wasn't explicitly set we handle the case of
+        // initial renaming of torrent content and rename torrent accordingly
+        if (loadTorrentParams.name.isEmpty())
+        {
+            QString contentName = Utils::Fs::findRootFolder(filePaths);
+            if (contentName.isEmpty() && (filePaths.size() == 1))
+                contentName = Utils::Fs::fileName(filePaths.at(0));
+
+            if (!contentName.isEmpty() && (contentName != torrentInfo.name()))
+                loadTorrentParams.name = contentName;
+        }
 
         if (!loadTorrentParams.hasSeedStatus)
         {
@@ -4033,7 +4056,7 @@ bool Session::addMoveTorrentStorageJob(TorrentImpl *torrent, const QString &newP
 
     if (m_moveStorageQueue.size() > 1)
     {
-        const auto iter = std::find_if(m_moveStorageQueue.begin() + 1, m_moveStorageQueue.end()
+        auto iter = std::find_if(m_moveStorageQueue.begin() + 1, m_moveStorageQueue.end()
                                  , [&torrentHandle](const MoveStorageJob &job)
         {
             return job.torrentHandle == torrentHandle;
@@ -4042,8 +4065,16 @@ bool Session::addMoveTorrentStorageJob(TorrentImpl *torrent, const QString &newP
         if (iter != m_moveStorageQueue.end())
         {
             // remove existing inactive job
-            m_moveStorageQueue.erase(iter);
             LogMsg(tr("Cancelled moving \"%1\" from \"%2\" to \"%3\".").arg(torrent->name(), currentLocation, iter->path));
+            iter = m_moveStorageQueue.erase(iter);
+
+            iter = std::find_if(iter, m_moveStorageQueue.end(), [&torrentHandle](const MoveStorageJob &job)
+            {
+                return job.torrentHandle == torrentHandle;
+            });
+
+            const bool torrentHasOutstandingJob = (iter != m_moveStorageQueue.end());
+            torrent->handleMoveStorageJobFinished(torrentHasOutstandingJob);
         }
     }
 
@@ -4346,53 +4377,114 @@ void Session::startUpTorrents()
     const QVector<TorrentID> torrents = startupStorage->registeredTorrents();
     int resumedTorrentsCount = 0;
     QVector<TorrentID> queue;
-    for (const TorrentID &torrentID : torrents)
+#ifdef QBT_USES_LIBTORRENT2
+    const QSet<TorrentID> indexedTorrents {torrents.cbegin(), torrents.cend()};
+    QSet<TorrentID> skippedIDs;
+#endif
+    for (TorrentID torrentID : torrents)
     {
+#ifdef QBT_USES_LIBTORRENT2
+        if (skippedIDs.contains(torrentID))
+            continue;
+#endif
+
         const std::optional<LoadTorrentParams> loadResumeDataResult = startupStorage->load(torrentID);
-        if (loadResumeDataResult)
-        {
-            LoadTorrentParams resumeData = *loadResumeDataResult;
-            bool needStore = false;
-
-            if (m_resumeDataStorage != startupStorage)
-            {
-               needStore = true;
-               if (isQueueingSystemEnabled() && !resumeData.hasSeedStatus)
-                    queue.append(torrentID);
-            }
-
-            // TODO: Remove the following upgrade code in v4.5
-            // == BEGIN UPGRADE CODE ==
-            if (m_needUpgradeDownloadPath && isDownloadPathEnabled())
-            {
-                if (!resumeData.useAutoTMM)
-                {
-                    resumeData.downloadPath = downloadPath();
-                    needStore = true;
-                }
-            }
-            // == END UPGRADE CODE ==
-
-            if (needStore)
-                 m_resumeDataStorage->store(torrentID, resumeData);
-
-            qDebug() << "Starting up torrent" << torrentID.toString() << "...";
-            if (!loadTorrent(resumeData))
-            {
-                LogMsg(tr("Unable to resume torrent '%1'.", "e.g: Unable to resume torrent 'hash'.")
-                       .arg(torrentID.toString()), Log::CRITICAL);
-            }
-
-            // process add torrent messages before message queue overflow
-            if ((resumedTorrentsCount % 100) == 0) readAlerts();
-
-            ++resumedTorrentsCount;
-        }
-        else
+        if (!loadResumeDataResult)
         {
             LogMsg(tr("Unable to resume torrent '%1'.", "e.g: Unable to resume torrent 'hash'.")
                        .arg(torrentID.toString()), Log::CRITICAL);
+            continue;
         }
+
+        LoadTorrentParams resumeData = *loadResumeDataResult;
+        bool needStore = false;
+
+#ifdef QBT_USES_LIBTORRENT2
+        const lt::info_hash_t infoHash = (resumeData.ltAddTorrentParams.ti
+                                          ? resumeData.ltAddTorrentParams.ti->info_hashes()
+                                          : resumeData.ltAddTorrentParams.info_hashes);
+        if (infoHash.has_v1() && infoHash.has_v2())
+        {
+            const auto torrentIDv1 = TorrentID::fromInfoHash(lt::info_hash_t(infoHash.v1));
+            const auto torrentIDv2 = TorrentID::fromInfoHash(infoHash);
+            if (torrentID == torrentIDv2)
+            {
+                if (indexedTorrents.contains(torrentIDv1))
+                {
+                    // if we has no metadata trying to find it in alternative "resume data"
+                    if (!resumeData.ltAddTorrentParams.ti)
+                    {
+                        const std::optional<LoadTorrentParams> loadAltResumeDataResult = startupStorage->load(torrentIDv1);
+                        if (loadAltResumeDataResult)
+                        {
+                            LoadTorrentParams altResumeData = *loadAltResumeDataResult;
+                            resumeData.ltAddTorrentParams.ti = altResumeData.ltAddTorrentParams.ti;
+                        }
+                    }
+
+                    // remove alternative "resume data" and skip the attempt to load it
+                    m_resumeDataStorage->remove(torrentIDv1);
+                    skippedIDs.insert(torrentIDv1);
+                }
+            }
+            else
+            {
+                torrentID = torrentIDv2;
+                needStore = true;
+                m_resumeDataStorage->remove(torrentIDv1);
+
+                if (indexedTorrents.contains(torrentID))
+                {
+                    skippedIDs.insert(torrentID);
+
+                    const std::optional<LoadTorrentParams> loadPreferredResumeDataResult = startupStorage->load(torrentID);
+                    if (loadPreferredResumeDataResult)
+                    {
+                        LoadTorrentParams preferredResumeData = *loadPreferredResumeDataResult;
+                        std::shared_ptr<lt::torrent_info> ti = resumeData.ltAddTorrentParams.ti;
+                        if (!preferredResumeData.ltAddTorrentParams.ti)
+                            preferredResumeData.ltAddTorrentParams.ti = ti;
+
+                        resumeData = preferredResumeData;
+                    }
+                }
+            }
+        }
+#endif
+
+        if (m_resumeDataStorage != startupStorage)
+        {
+           needStore = true;
+           if (isQueueingSystemEnabled() && !resumeData.hasSeedStatus)
+                queue.append(torrentID);
+        }
+
+        // TODO: Remove the following upgrade code in v4.6
+        // == BEGIN UPGRADE CODE ==
+        if (m_needUpgradeDownloadPath && isDownloadPathEnabled())
+        {
+            if (!resumeData.useAutoTMM)
+            {
+                resumeData.downloadPath = downloadPath();
+                needStore = true;
+            }
+        }
+        // == END UPGRADE CODE ==
+
+        if (needStore)
+             m_resumeDataStorage->store(torrentID, resumeData);
+
+        qDebug() << "Starting up torrent" << torrentID.toString() << "...";
+        if (!loadTorrent(resumeData))
+        {
+            LogMsg(tr("Unable to resume torrent '%1'.", "e.g: Unable to resume torrent 'hash'.")
+                   .arg(torrentID.toString()), Log::CRITICAL);
+        }
+
+        // process add torrent messages before message queue overflow
+        if ((resumedTorrentsCount % 100) == 0) readAlerts();
+
+        ++resumedTorrentsCount;
     }
 
     if (m_resumeDataStorage != startupStorage)
@@ -4489,6 +4581,7 @@ void Session::handleAlert(const lt::alert *a)
         case lt::file_prio_alert::alert_type:
 #endif
         case lt::file_renamed_alert::alert_type:
+        case lt::file_rename_failed_alert::alert_type:
         case lt::file_completed_alert::alert_type:
         case lt::torrent_finished_alert::alert_type:
         case lt::save_resume_data_alert::alert_type:
@@ -4501,6 +4594,7 @@ void Session::handleAlert(const lt::alert *a)
         case lt::fastresume_rejected_alert::alert_type:
         case lt::torrent_checked_alert::alert_type:
         case lt::metadata_received_alert::alert_type:
+        case lt::performance_alert::alert_type:
             dispatchTorrentAlert(a);
             break;
         case lt::state_update_alert::alert_type:

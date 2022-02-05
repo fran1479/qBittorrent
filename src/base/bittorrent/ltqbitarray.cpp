@@ -1,6 +1,6 @@
 /*
  * Bittorrent Client using Qt and libtorrent.
- * Copyright (C) 2017  Tony Gregerson <tony.gregerson@gmail.com>
+ * Copyright (C) 2022  Mike Tzou (Chocobo1)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,36 +26,47 @@
  * exception statement from your version.
  */
 
-#pragma once
+#include "ltqbitarray.h"
 
-#include <QTreeView>
+#include <memory>
 
-class TagFilterWidget final : public QTreeView
+#include <libtorrent/bitfield.hpp>
+
+#include <QBitArray>
+
+namespace
 {
-    Q_OBJECT
+    unsigned char reverseByte(const unsigned char byte)
+    {
+        // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
+        return (((byte * 0x80200802ULL) & 0x0884422110ULL) * 0x0101010101ULL) >> 32;
+    }
+}
 
-public:
-    explicit TagFilterWidget(QWidget *parent = nullptr);
+namespace BitTorrent::LT
+{
+    QBitArray toQBitArray(const lt::bitfield &bits)
+    {
+        const int STACK_ALLOC_SIZE = 10 * 1024;
 
-    QString currentTag() const;
+        const char *bitsData = bits.data();
+        const int dataLength = (bits.size() + 7) / 8;
 
-signals:
-    void tagChanged(const QString &tag);
-    void actionResumeTorrentsTriggered();
-    void actionPauseTorrentsTriggered();
-    void actionDeleteTorrentsTriggered();
+        if (dataLength <= STACK_ALLOC_SIZE)
+        {
+            // fast path for small bitfields
+            char tmp[STACK_ALLOC_SIZE];  // uninitialized for faster allocation
+            for (int i = 0; i < dataLength; ++i)
+                tmp[i] = reverseByte(bitsData[i]);
 
-private slots:
-    void onCurrentRowChanged(const QModelIndex &current, const QModelIndex &previous);
-    void showMenu();
-    void callUpdateGeometry();
-    void addTag();
-    void removeTag();
-    void removeUnusedTags();
+            return QBitArray::fromBits(tmp, bits.size());
+        }
 
-private:
-    QSize sizeHint() const override;
-    QSize minimumSizeHint() const override;
-    void rowsInserted(const QModelIndex &parent, int start, int end) override;
-    QString askTagName();
-};
+        // slow path for big bitfields
+        auto tmp = std::make_unique<char []>(dataLength);
+        for (int i = 0; i < dataLength; ++i)
+            tmp[i] = reverseByte(bitsData[i]);
+
+        return QBitArray::fromBits(tmp.get(), bits.size());
+    }
+}

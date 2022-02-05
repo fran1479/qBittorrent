@@ -30,6 +30,7 @@
 
 #include <algorithm>
 
+#include <QAction>
 #include <QDebug>
 #include <QDir>
 #include <QFileDialog>
@@ -200,7 +201,7 @@ AddNewTorrentDialog::AddNewTorrentDialog(const BitTorrent::AddTorrentParams &inP
 
     m_ui->startTorrentCheckBox->setChecked(!m_torrentParams.addPaused.value_or(session->isAddTorrentPaused()));
 
-    m_ui->comboTTM->blockSignals(true); // the TreeView size isn't correct if the slot does it job at this point
+    m_ui->comboTTM->blockSignals(true); // the TreeView size isn't correct if the slot does its job at this point
     m_ui->comboTTM->setCurrentIndex(session->isAutoTMMDisabledByDefault() ? 0 : 1);
     m_ui->comboTTM->blockSignals(false);
 
@@ -235,7 +236,11 @@ AddNewTorrentDialog::AddNewTorrentDialog(const BitTorrent::AddTorrentParams &inP
         if (category != defaultCategory && category != m_torrentParams.category)
             m_ui->categoryComboBox->addItem(category);
 
+    m_ui->contentTreeView->header()->setContextMenuPolicy(Qt::CustomContextMenu);
     m_ui->contentTreeView->header()->setSortIndicator(0, Qt::AscendingOrder);
+
+    connect(m_ui->contentTreeView->header(), &QWidget::customContextMenuRequested, this, &AddNewTorrentDialog::displayColumnHeaderMenu);
+
     loadState();
     // Signal / slots
     connect(m_ui->doNotDeleteTorrentCheckBox, &QCheckBox::clicked, this, &AddNewTorrentDialog::doNotDeleteTorrentClicked);
@@ -656,7 +661,7 @@ void AddNewTorrentDialog::populateSavePaths()
     m_ui->groupBoxDownloadPath->blockSignals(false);
 }
 
-void AddNewTorrentDialog::displayContentTreeMenu(const QPoint &)
+void AddNewTorrentDialog::displayContentTreeMenu()
 {
     const QModelIndexList selectedRows = m_ui->contentTreeView->selectionModel()->selectedRows(0);
 
@@ -705,6 +710,7 @@ void AddNewTorrentDialog::displayContentTreeMenu(const QPoint &)
 
     QMenu *menu = new QMenu(this);
     menu->setAttribute(Qt::WA_DeleteOnClose);
+
     if (selectedRows.size() == 1)
     {
         menu->addAction(UIThemeManager::instance()->getIcon("edit-rename"), tr("Rename..."), this, &AddNewTorrentDialog::renameSelectedFile);
@@ -751,6 +757,25 @@ void AddNewTorrentDialog::displayContentTreeMenu(const QPoint &)
         menu->addSeparator();
         menu->addAction(tr("Priority by shown file order"), menu, applyPrioritiesByOrder);
     }
+
+    menu->popup(QCursor::pos());
+}
+
+void AddNewTorrentDialog::displayColumnHeaderMenu()
+{
+    QMenu *menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->setToolTipsVisible(true);
+
+    QAction *resizeAction = menu->addAction(tr("Resize columns"), this, [this]()
+    {
+        for (int i = 0, count = m_ui->contentTreeView->header()->count(); i < count; ++i)
+        {
+            if (!m_ui->contentTreeView->isColumnHidden(i))
+                m_ui->contentTreeView->resizeColumnToContents(i);
+        }
+    });
+    resizeAction->setToolTip(tr("Resize all non-hidden columns to the size of their contents"));
 
     menu->popup(QCursor::pos());
 }
@@ -874,6 +899,8 @@ void AddNewTorrentDialog::setupTreeview()
         connect(m_ui->contentTreeView, &QAbstractItemView::clicked, m_ui->contentTreeView
                 , qOverload<const QModelIndex &>(&QAbstractItemView::edit));
         connect(m_ui->contentTreeView, &QWidget::customContextMenuRequested, this, &AddNewTorrentDialog::displayContentTreeMenu);
+        connect(m_ui->buttonSelectAll, &QPushButton::clicked, m_contentModel, &TorrentContentFilterModel::selectAll);
+        connect(m_ui->buttonSelectNone, &QPushButton::clicked, m_contentModel, &TorrentContentFilterModel::selectNone);
 
         const auto contentLayout = ((m_ui->contentLayoutComboBox->currentIndex() == 0)
                                     ? BitTorrent::detectContentLayout(m_torrentInfo.filePaths())
@@ -964,9 +991,9 @@ void AddNewTorrentDialog::TMMChanged(int index)
 
         m_ui->groupBoxDownloadPath->blockSignals(true);
         m_ui->groupBoxDownloadPath->setChecked(!downloadPath.isEmpty());
-
-        updateDiskSpaceLabel();
     }
+
+    updateDiskSpaceLabel();
 }
 
 void AddNewTorrentDialog::doNotDeleteTorrentClicked(bool checked)
