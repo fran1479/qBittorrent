@@ -78,7 +78,7 @@ void FileLogger::changePath(const Path &newPath)
 
     closeLogFile();
 
-    m_path = newPath / Path("qbittorrent.log");
+    m_path = newPath / Path(u"qbittorrent.log"_qs);
     m_logFile.setFileName(m_path.data());
 
     Utils::Fs::mkpath(newPath);
@@ -89,7 +89,7 @@ void FileLogger::deleteOld(const int age, const FileLogAgeType ageType)
 {
     const QDateTime date = QDateTime::currentDateTime();
     const QDir dir {m_path.parentPath().data()};
-    const QFileInfoList fileList = dir.entryInfoList(QStringList("qbittorrent.log.bak*")
+    const QFileInfoList fileList = dir.entryInfoList(QStringList(u"qbittorrent.log.bak*"_qs)
         , (QDir::Files | QDir::Writable), (QDir::Time | QDir::Reversed));
 
     for (const QFileInfo &file : fileList)
@@ -134,30 +134,30 @@ void FileLogger::addLogMessage(const Log::Msg &msg)
     switch (msg.type)
     {
     case Log::INFO:
-        stream << "(I) ";
+        stream << u"(I) ";
         break;
     case Log::WARNING:
-        stream << "(W) ";
+        stream << u"(W) ";
         break;
     case Log::CRITICAL:
-        stream << "(C) ";
+        stream << u"(C) ";
         break;
     default:
-        stream << "(N) ";
+        stream << u"(N) ";
     }
 
-    stream << QDateTime::fromMSecsSinceEpoch(msg.timestamp).toString(Qt::ISODate) << " - " << msg.message << '\n';
+    stream << QDateTime::fromMSecsSinceEpoch(msg.timestamp).toString(Qt::ISODate) << u" - " << msg.message << u'\n';
 
     if (m_backup && (m_logFile.size() >= m_maxSize))
     {
         closeLogFile();
         int counter = 0;
-        Path backupLogFilename = m_path + ".bak";
+        Path backupLogFilename = m_path + u".bak";
 
         while (backupLogFilename.exists())
         {
             ++counter;
-            backupLogFilename = m_path + ".bak" + QString::number(counter);
+            backupLogFilename = m_path + u".bak" + QString::number(counter);
         }
 
         Utils::Fs::renameFile(m_path, backupLogFilename);

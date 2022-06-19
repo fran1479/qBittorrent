@@ -37,7 +37,7 @@
 #include "ui_watchedfolderoptionsdialog.h"
 #include "utils.h"
 
-#define SETTINGS_KEY(name) "WatchedFolderOptionsDialog/" name
+#define SETTINGS_KEY(name) u"WatchedFolderOptionsDialog/" name
 
 WatchedFolderOptionsDialog::WatchedFolderOptionsDialog(
         const TorrentFilesWatcher::WatchedFolderOptions &watchedFolderOptions, QWidget *parent)
@@ -45,7 +45,7 @@ WatchedFolderOptionsDialog::WatchedFolderOptionsDialog(
     , m_ui {new Ui::WatchedFolderOptionsDialog}
     , m_savePath {watchedFolderOptions.addTorrentParams.savePath}
     , m_downloadPath {watchedFolderOptions.addTorrentParams.downloadPath}
-    , m_storeDialogSize {SETTINGS_KEY("DialogSize")}
+    , m_storeDialogSize {SETTINGS_KEY(u"DialogSize"_qs)}
 {
     m_ui->setupUi(this);
 
@@ -77,7 +77,7 @@ WatchedFolderOptionsDialog::WatchedFolderOptionsDialog(
 
     if (!torrentParams.category.isEmpty())
         m_ui->categoryComboBox->addItem(torrentParams.category);
-    m_ui->categoryComboBox->addItem("");
+    m_ui->categoryComboBox->addItem(u""_qs);
 
     for (const QString &category : asConst(categories))
     {
@@ -87,7 +87,11 @@ WatchedFolderOptionsDialog::WatchedFolderOptionsDialog(
 
     loadState();
 
-    m_ui->buttonBox->button(QDialogButtonBox::Ok)->setFocus();
+    // Default focus
+    if (m_ui->comboTTM->currentIndex() == 0) // 0 is Manual mode
+        m_ui->savePath->setFocus();
+    else
+        m_ui->categoryComboBox->setFocus();
 }
 
 WatchedFolderOptionsDialog::~WatchedFolderOptionsDialog()
@@ -121,7 +125,8 @@ TorrentFilesWatcher::WatchedFolderOptions WatchedFolderOptionsDialog::watchedFol
 
 void WatchedFolderOptionsDialog::loadState()
 {
-    Utils::Gui::resize(this, m_storeDialogSize);
+    if (const QSize dialogSize = m_storeDialogSize; dialogSize.isValid())
+        resize(dialogSize);
 }
 
 void WatchedFolderOptionsDialog::saveState()

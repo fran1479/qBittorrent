@@ -1,6 +1,6 @@
 /*
  * Bittorrent Client using Qt and libtorrent.
- * Copyright (C) 2020-2021  Vladimir Golovnev <glassez@yandex.ru>
+ * Copyright (C) 2022  Mike Tzou (Chocobo1)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,44 +26,15 @@
  * exception statement from your version.
  */
 
-#include "torrentcontentlayout.h"
+#pragma once
 
-#include "base/utils/fs.h"
+class QString;
 
-namespace
+class IStringable
 {
-    Path removeExtension(const Path &fileName)
-    {
-        Path result = fileName;
-        result.removeExtension();
-        return result;
-    }
-}
+public:
+    virtual ~IStringable() = default;
 
-BitTorrent::TorrentContentLayout BitTorrent::detectContentLayout(const PathList &filePaths)
-{
-    const Path rootFolder = Path::findRootFolder(filePaths);
-    return (rootFolder.isEmpty()
-            ? TorrentContentLayout::NoSubfolder
-            : TorrentContentLayout::Subfolder);
-}
-
-void BitTorrent::applyContentLayout(PathList &filePaths, const BitTorrent::TorrentContentLayout contentLayout, const Path &rootFolder)
-{
-    Q_ASSERT(!filePaths.isEmpty());
-
-    switch (contentLayout)
-    {
-    case TorrentContentLayout::Subfolder:
-        if (Path::findRootFolder(filePaths).isEmpty())
-            Path::addRootFolder(filePaths, !rootFolder.isEmpty() ? rootFolder : removeExtension(filePaths.at(0)));
-        break;
-
-    case TorrentContentLayout::NoSubfolder:
-        Path::stripRootFolder(filePaths);
-        break;
-
-    default:
-        break;
-    }
-}
+    // requirement: T(const QString &) constructor for derived class `T`  // TODO: try enforce it in C++20 concept
+    virtual QString toString() const = 0;
+};

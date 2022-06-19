@@ -38,7 +38,6 @@
 
 class QDateTime;
 class QNetworkCookie;
-class QSize;
 class QTime;
 
 namespace Scheduler
@@ -93,11 +92,6 @@ class Preferences : public QObject
     Q_DISABLE_COPY_MOVE(Preferences)
 
     Preferences();
-
-    static Preferences *m_instance;
-
-signals:
-    void changed();
 
 public:
     static void initInstance();
@@ -340,8 +334,10 @@ public:
     void setAcceptedLegal(bool accepted);
     QByteArray getMainGeometry() const;
     void setMainGeometry(const QByteArray &geometry);
-    QByteArray getMainVSplitterState() const;
-    void setMainVSplitterState(const QByteArray &state);
+    bool isFiltersSidebarVisible() const;
+    void setFiltersSidebarVisible(bool value);
+    int getFiltersSidebarWidth() const;
+    void setFiltersSidebarWidth(int value);
     Path getMainLastDir() const;
     void setMainLastDir(const Path &path);
     QByteArray getPeerListState() const;
@@ -356,10 +352,6 @@ public:
     void setPropVisible(bool visible);
     QByteArray getPropTrackerListState() const;
     void setPropTrackerListState(const QByteArray &state);
-    QSize getRssGeometrySize() const;
-    void setRssGeometrySize(const QSize &geometry);
-    QByteArray getRssHSplitterSizes() const;
-    void setRssHSplitterSizes(const QByteArray &sizes);
     QStringList getRssOpenFolders() const;
     void setRssOpenFolders(const QStringList &folders);
     QByteArray getRssSideSplitterState() const;
@@ -412,4 +404,10 @@ public slots:
     void setTrackerFilterState(bool checked);
 
     void apply();
+
+signals:
+    void changed();
+
+private:
+    static Preferences *m_instance;
 };

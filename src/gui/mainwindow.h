@@ -74,6 +74,7 @@ namespace Ui
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(MainWindow)
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
@@ -115,6 +116,7 @@ private slots:
     void showFilterContextMenu();
     void balloonClicked();
     void writeSettings();
+    void writeSplitterSettings();
     void readSettings();
     void fullDiskError(BitTorrent::Torrent *const torrent, const QString &msg) const;
     void handleDownloadFromUrlFailure(const QString &, const QString &) const;
@@ -158,6 +160,7 @@ private slots:
     void on_actionSpeedInTitleBar_triggered();
     void on_actionTopToolBar_triggered();
     void on_actionShowStatusbar_triggered();
+    void on_actionShowFiltersSidebar_triggered(bool checked);
     void on_actionDonateMoney_triggered();
     void on_actionExecutionLogs_triggered(bool checked);
     void on_actionNormalMessages_triggered(bool checked);
@@ -214,6 +217,7 @@ private:
     void displaySearchTab(bool enable);
     void createTorrentTriggered(const Path &path);
     void showStatusBar(bool show);
+    void showFiltersSidebar(bool show);
 
     Ui::MainWindow *m_ui;
 
@@ -234,7 +238,7 @@ private:
     QPointer<QMenu> m_trayIconMenu;
 
     TransferListWidget *m_transferListWidget;
-    TransferListFiltersWidget *m_transferListFiltersWidget;
+    TransferListFiltersWidget *m_transferListFiltersWidget = nullptr;
     PropertiesWidget *m_propertiesWidget;
     bool m_displaySpeedInTitle;
     bool m_forceExit = false;

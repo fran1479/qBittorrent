@@ -37,7 +37,6 @@
 #include <QPushButton>
 #include <QShowEvent>
 #include <QStandardItemModel>
-#include <QTableView>
 
 #include "base/bittorrent/torrent.h"
 #include "base/preferences.h"
@@ -47,17 +46,17 @@
 #include "ui_previewselectdialog.h"
 #include "utils.h"
 
-#define SETTINGS_KEY(name) "PreviewSelectDialog/" name
+#define SETTINGS_KEY(name) u"PreviewSelectDialog/" name
 
 PreviewSelectDialog::PreviewSelectDialog(QWidget *parent, const BitTorrent::Torrent *torrent)
     : QDialog(parent)
     , m_ui(new Ui::PreviewSelectDialog)
     , m_torrent(torrent)
-    , m_storeDialogSize(SETTINGS_KEY("Size"))
+    , m_storeDialogSize(SETTINGS_KEY(u"Size"_qs))
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-    , m_storeTreeHeaderState("GUI/Qt6/" SETTINGS_KEY("HeaderState"))
+    , m_storeTreeHeaderState(u"GUI/Qt6/" SETTINGS_KEY(u"HeaderState"_qs))
 #else
-    , m_storeTreeHeaderState(SETTINGS_KEY("HeaderState"))
+    , m_storeTreeHeaderState(SETTINGS_KEY(u"HeaderState"_qs))
 #endif
 {
     m_ui->setupUi(this);
@@ -76,13 +75,6 @@ PreviewSelectDialog::PreviewSelectDialog(QWidget *parent, const BitTorrent::Torr
     m_previewListModel->setHeaderData(NAME, Qt::Horizontal, tr("Name"));
     m_previewListModel->setHeaderData(SIZE, Qt::Horizontal, tr("Size"));
     m_previewListModel->setHeaderData(PROGRESS, Qt::Horizontal, tr("Progress"));
-
-    // This hack fixes reordering of first column with Qt5.
-    // https://github.com/qtproject/qtbase/commit/e0fc088c0c8bc61dbcaf5928b24986cd61a22777
-    QTableView unused;
-    unused.setVerticalHeader(m_ui->previewList->header());
-    m_ui->previewList->header()->setParent(m_ui->previewList);
-    unused.setVerticalHeader(new QHeaderView(Qt::Horizontal));
 
     m_ui->previewList->setAlternatingRowColors(pref->useAlternatingRowColors());
     m_ui->previewList->setModel(m_previewListModel);
@@ -107,6 +99,7 @@ PreviewSelectDialog::PreviewSelectDialog(QWidget *parent, const BitTorrent::Torr
 
     m_previewListModel->sort(NAME);
     m_ui->previewList->header()->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_ui->previewList->header()->setFirstSectionMovable(true);
     m_ui->previewList->header()->setSortIndicator(0, Qt::AscendingOrder);
     m_ui->previewList->selectionModel()->select(m_previewListModel->index(0, NAME), QItemSelectionModel::Select | QItemSelectionModel::Rows);
 
@@ -180,13 +173,12 @@ void PreviewSelectDialog::saveWindowState()
 void PreviewSelectDialog::loadWindowState()
 {
     // Restore dialog size
-    Utils::Gui::resize(this, m_storeDialogSize);
+    if (const QSize dialogSize = m_storeDialogSize; dialogSize.isValid())
+        resize(dialogSize);
 
     // Restore TreeView Header state
-    if (!m_storeTreeHeaderState.get().isEmpty())
-    {
-        m_headerStateInitialized = m_ui->previewList->header()->restoreState(m_storeTreeHeaderState);
-    }
+    if (const QByteArray treeHeaderState = m_storeTreeHeaderState; !treeHeaderState.isEmpty())
+        m_headerStateInitialized = m_ui->previewList->header()->restoreState(treeHeaderState);
 }
 
 void PreviewSelectDialog::showEvent(QShowEvent *event)

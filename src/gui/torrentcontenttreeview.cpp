@@ -34,8 +34,8 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QModelIndexList>
-#include <QTableView>
 #include <QThread>
+#include <QWheelEvent>
 
 #include "base/bittorrent/abstractfilestorage.h"
 #include "base/bittorrent/common.h"
@@ -66,15 +66,7 @@ TorrentContentTreeView::TorrentContentTreeView(QWidget *parent)
     : QTreeView(parent)
 {
     setExpandsOnDoubleClick(false);
-
-    // This hack fixes reordering of first column with Qt5.
-    // https://github.com/qtproject/qtbase/commit/e0fc088c0c8bc61dbcaf5928b24986cd61a22777
-    QTableView unused;
-    unused.setVerticalHeader(header());
-    header()->setParent(this);
-    header()->setStretchLastSection(false);
-    header()->setTextElideMode(Qt::ElideRight);
-    unused.setVerticalHeader(new QHeaderView(Qt::Horizontal));
+    header()->setFirstSectionMovable(true);
 }
 
 void TorrentContentTreeView::keyPressEvent(QKeyEvent *event)
@@ -160,4 +152,20 @@ QModelIndex TorrentContentTreeView::currentNameCell()
     }
 
     return model()->index(current.row(), TorrentContentModelItem::COL_NAME, current.parent());
+}
+
+void TorrentContentTreeView::wheelEvent(QWheelEvent *event)
+{
+    if (event->modifiers() & Qt::ShiftModifier)
+    {
+        // Shift + scroll = horizontal scroll
+        event->accept();
+        QWheelEvent scrollHEvent {event->position(), event->globalPosition()
+            , event->pixelDelta(), event->angleDelta().transposed(), event->buttons()
+            , event->modifiers(), event->phase(), event->inverted(), event->source()};
+        QTreeView::wheelEvent(&scrollHEvent);
+        return;
+    }
+
+    QTreeView::wheelEvent(event);  // event delegated to base class
 }

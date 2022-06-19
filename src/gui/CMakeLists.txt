@@ -50,6 +50,7 @@ add_library(qbt_gui STATIC
     fspathedit.h
     fspathedit_p.h
     hidabletabwidget.h
+    interfaces/iguiapplication.h
     ipsubnetwhitelistoptionsdialog.h
     lineedit.h
     log/logfiltermodel.h
@@ -217,6 +218,16 @@ if (DBUS)
         qtnotify/notifications.cpp
         powermanagement/powermanagement_x11.h
         powermanagement/powermanagement_x11.cpp
+    )
+endif()
+
+if (STACKTRACE)
+    qt_wrap_ui(STACKTRACE_UI_HEADERS stacktracedialog.ui)
+
+    target_sources(qbt_gui PRIVATE
+        stacktracedialog.h
+        stacktracedialog.cpp
+        ${STACKTRACE_UI_HEADERS}
     )
 endif()
 
